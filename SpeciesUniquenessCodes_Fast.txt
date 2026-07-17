@@ -1,0 +1,61 @@
+# This is R codes for calculating network-based species uniqueness using the current approach (STO) and our proposed approach (STO1).
+# Food web FW15.txt, the Great Barrier Reef food web, is used for demonstration. 
+# The programe takes 5 seconds to run on a Windows PC with the following specs:
+# 11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz (2.42 GHz)
+# 8.00 GB RAM 
+
+data <- read.table("C:\\Users\\user\\Desktop\\Work\\SpeciesUniqueness_2025_9_14\\FoodWebDataset\\FW15.txt", header=FALSE) # Data as edge list, 1st and 2nd columns are prey and predator.
+numstep <- 3 # Number of steps considered to construct the interaqction structure of the food web.
+
+# Collect species names from data, and determine the number of species.
+col1 <- as.character(data[, 1])
+col2 <- as.character(data[, 2])
+nodeID <- sort(unique(c(col1, col2)))
+numnode <- length(nodeID)
+
+# Construct matrix mx, which represents the food web as a binary graph without link direction. 
+mx <- matrix(0, nrow = numnode, ncol = numnode, dimnames = list(nodeID, nodeID))
+idx1 <- match(col1, nodeID)
+idx2 <- match(col2, nodeID)
+mx[cbind(idx1, idx2)] <- 1
+mx[cbind(idx2, idx1)] <- 1
+diag(mx) <- 0 # Ignore self-loops
+
+# Construct the interaction structure of a food web.
+TI<-mx
+for (i in 1:numnode){
+  for (j in 1:numnode) TI[j,i]<-mx[j,i]/sum(mx[,i])
+}
+SI<-matrix(rep(0,numnode^2),nrow=numnode,ncol=numnode)
+CI<-diag(numnode)
+for (i in 1:numstep){
+  CI<-CI%*%TI
+  SI<-SI+CI
+}
+
+# Calculate network-based species uniqueness using the current approach, STO, and our proposed approach STO1.
+ET <- seq(0, 1, 0.00001) # Vector containing effect threshold T from 0 to 1 with a increment step of 0.00001.
+num_ET <- length(ET)
+
+dumMx  <- matrix(0, nrow = num_ET, ncol = numnode) # Matrix for overlap profiles for the current approach.
+dumMx1 <- matrix(0, nrow = num_ET, ncol = numnode) # Matrix for overlap profiles for our proposed approach.
+
+# Determine TO at each T, for the current approach and our proposed approach.
+for (k in 1:num_ET) {  
+  Intor <- ifelse((SI / numstep) >= ET[k], 1, 0) # Determine the sets of strong interactors, or species' fields of influence.  
+  intersect_matrix <- Intor %*% t(Intor) # Determine the overlaps in species' fields of influence.
+  dumMx1[k, ] <- rowSums(intersect_matrix) - diag(intersect_matrix) # Determine the overlaps in species' fields of influence.
+  
+  not_Intor <- 1 - Intor # Determine the sets of weak interactors, or information outside species' fields of influence.
+  union_zero_matrix <- not_Intor %*% t(not_Intor) # Determine the overlaps in information outside species' fields of influence.
+  equiv_matrix <- intersect_matrix + union_zero_matrix # Determine overlaps in species' fields of influence and overlaps in information outside species' fields of influence.
+  dumMx[k, ] <- rowSums(equiv_matrix) - diag(equiv_matrix) # Determine overlaps in species' fields of influence and overlaps in information outside species' fields of influence.
+}
+
+STO <- colSums(dumMx)  # Calculate STO for all species.
+names(STO) <- nodeID
+
+STO1 <- colSums(dumMx1) # Calculate STO1 for all species.
+names(STO1) <- nodeID
+
+# Simply type STO and STO1 to see network-based uniqueness values based on the current approach and our proposed approach respectively. 
